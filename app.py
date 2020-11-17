@@ -4,13 +4,9 @@ import socket
 from aiohttp import web
 
 from middleware import json_error_middleware
-from scanner import scan, check_port
+from scanner import scan
 from logger import app_logger as logger
 
-routes = web.RouteTableDef()
-loop = asyncio.get_event_loop()
-
-@routes.get('/{ip}/{begin_port}/{end_port}')
 async def handle(request):
     ip = request.match_info.get('ip')
     begin_port = int(request.match_info.get('begin_port', 0))
@@ -28,14 +24,17 @@ async def handle(request):
     if not (1 <= end_port <= 65535):
         raise web.HTTPBadRequest(text='Invalid end port')
 
-    report = await scan(ip, begin_port, end_port+1, loop)
+    report = await scan(ip, begin_port, end_port+1)
     return web.json_response(report)
 
-app = web.Application(middlewares=[json_error_middleware], logger=logger)
-app.add_routes(routes)
+def create_app():
+    app = web.Application(middlewares=[json_error_middleware], logger=logger)
+    app.router.add_route('GET', '/{ip}/{begin_port}/{end_port}', handle)
+    return app
 
-if __name__ == '__main__':    
-    runner = web.AppRunner(app)
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()    
+    runner = web.AppRunner(create_app())
     loop.run_until_complete(runner.setup())
     site = web.TCPSite(runner, port=8080)    
     loop.run_until_complete(site.start())
